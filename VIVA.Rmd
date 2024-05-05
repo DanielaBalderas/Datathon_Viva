@@ -1,0 +1,284 @@
+---
+title: "DATATHON"
+output: html_document
+date: "2024-05-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+```{r, include=FALSE}
+library(DataExplorer)
+library(visdat) 
+library(dplyr) 
+library(ggplot2) 
+library(stringr)
+library(esquisse)
+library(lubridate)
+```
+
+```{r}
+base1 <- "Filghts TEC_Valid.csv"
+metadata1 <- read.csv(base1)
+#View(metadata1)
+```
+
+```{r}
+base2 <- "Sales TEC_Valid.csv"
+metadata2 <- read.csv(base2)
+#View(metadata2)
+```
+
+```{r}
+metadata1 <- metadata1 %>%
+  filter(str_detect(STD, "2023"))
+```
+
+```{r}
+metadata1 <- metadata1 %>%
+  mutate(STD_TIME = STD, STD)
+```
+
+```{r}
+metadata1$STD <- as.Date(metadata1$STD)
+```
+
+```{r}
+metadata1$STA <- as.Date(metadata1$STA)
+```
+
+```{r}
+metadata1$STD_TIME <- metadata1$STD_TIME 
+
+metadata1$STD_TIME<- as.POSIXct(metadata1$STD_TIME)
+
+metadata1$STD_TIME <- format(metadata1$STD_TIME, format = "%H:%M:%S")
+```
+
+
+```{r}
+metadata1$STD_TIME <- gsub(":", "", metadata1$STD_TIME)
+metadata1$STD_TIME <- metadata1$STD_TIME %>%
+  as.numeric()
+```
+
+```{r}
+metadata1$STD_TIME <- ifelse(metadata1$STD_TIME < 120000, "AM", "PM")
+```
+
+```{r}
+metadata1 <- rename(metadata1, "AM-PM" = STD_TIME)
+```
+
+```{r}
+metadata1$STD <- format(metadata1$STD, "%m")
+
+metadata1$STD <- as.integer(metadata1$STD)
+
+metadata1 <- rename(metadata1, "Mes en numero" = STD)
+```
+
+```{r}
+metadata1$Temporada <- metadata1$`Mes en numero`
+
+metadata1$Temporada <- ifelse(metadata1$Temporada %in% c(01, 04, 07, 08, 12), "Alto", "Normal")
+```
+
+```{r}
+metadata1$Passengers <- ifelse(metadata1$Passengers > metadata1$Capacity, metadata1$Capacity, metadata1$Passengers)
+```
+
+```{r}
+metadata1 <- metadata1 %>%
+  mutate(USER = Bookings / Passengers)
+
+metadata1$USER <- ifelse(metadata1$USER > .60, "NO FAMILIAR", "FAMILIAR")
+```
+
+
+```{r}
+#library(esquisse)
+#esquisse::esquisser(metadata1, viewer = "browser")
+```
+```{r}
+ggplot(metadata1) +
+  aes(x = Bookings, y = Passengers, colour = Temporada) +
+  geom_point(shape = "circle", size = 1.5) +
+  geom_smooth(span = 0.75) +
+  scale_color_viridis_d(option = "cividis", direction = 1) +
+  labs(title = "Prediccion de pasajeros") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 17L,
+    face = "bold",
+    hjust = 0.5)
+  )
+```
+
+```{r}
+modelo <- lm(Passengers ~ Bookings, data = metadata1)
+modelo
+```
+
+```{r}
+metadata1 <- metadata1 %>%
+  mutate(PREDICCION = 81.8572 + (0.8811 * Bookings))
+
+```
+
+```{r}
+cor(metadata1[, sapply(metadata1, is.numeric)])
+```
+
+
+```{r}
+View(metadata1) 
+```
+
+```{r}
+prediccion <- read.csv(base1)
+prediccion <- prediccion %>%
+  filter(str_detect(STD, "2023"))
+```
+
+```{r}
+PROMEDIO <- mean(prediccion$Passengers)
+PROMEDIO
+```
+```{r}
+sd(prediccion$Passengers)
+```
+
+
+```{r}
+View(prediccion)
+```
+
+```{r}
+prediccion2 <- read.csv(base1)
+prediccion2 <- prediccion2 %>%
+  filter(str_detect(STD, "2024-01"))
+```
+
+```{r}
+library(mice)
+
+# Definir la función para generar números aleatorios dentro del rango de bookings en metadata1
+generar_random <- function(metadata1, n) {
+  min_booking <- min(89)
+  max_booking <- max(metadata1$Bookings)
+  mean_booking <-mean(173.84)
+  sd_booking <- sd(metadata1$Booking)
+  random_data <- numeric(n)
+  for (i in 1:n) {
+    random_num <- runif(1, min = min_booking, max = max_booking)
+    while (random_num > max_booking | random_num < min_booking) {
+      random_num <- runif(1, min = min_booking, max = max_booking)
+    }
+    random_data[i] <- random_num
+  }
+  return(random_data)
+}
+
+# Llamando a la función para generar 10,000 datos aleatorios
+random_numbers <- generar_random(metadata1, 10614)
+
+# Convertir el vector a un dataframe
+random_numbers_df <- data.frame(Bookings = random_numbers)
+
+# Ajustar el nombre de las columnas
+colnames(random_numbers_df) <- c("Book")
+
+
+prediccion2 <- cbind(prediccion2, random_numbers_df)
+
+```
+
+```{r}
+prediccion2$Bookings <- ifelse(prediccion2$Book > prediccion2$Capacity, prediccion2$Capacity, prediccion2$Book)
+prediccion2$Bookings <- as.integer(prediccion2$Bookings)
+prediccion2 <- select(prediccion2, -Book)
+```
+
+```{r}
+prediccion2 <- prediccion2 %>%
+  mutate(Passengers = 80.401 + (0.917 * Bookings))
+```
+
+```{r}
+prediccion2$Passengers <- ifelse(prediccion2$Passengers > prediccion2$Capacity, prediccion2$Capacity, prediccion2$Passengers)
+prediccion2$Passengers <- as.integer(prediccion2$Passengers)
+```
+
+```{r}
+View(prediccion2)
+```
+
+```{r}
+full_df <- full_join(metadata1, metadata2, by = "Flight_ID")
+print(full_df)
+```
+
+```{r}
+full_df <- select(full_df, Flight_ID, ProductType, ProductName, Quantity, Passengers)
+print(full_df)
+```
+
+
+
+
+
+
+```{r}
+library(dplyr)
+
+language_counts <- full_df %>%
+  filter(!ProductType %in% c("Antros", "COMBOS CREW", "OFERTAS ", "Specials", "Transportaciones CUN", "Transportaciones MTY", "Transportaciones TLC", "VIVA PLAY", "VIVA Taxis", "VivaTransfer", NA)) %>%
+  group_by(ProductType) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+```
+
+```{r}
+generar_random2 <- function(full_df, n) {
+  min_quantity <- min(full_df$Quantity)
+  max_quantity <- max(full_df$Quantity)
+  mean_quantity <- mean(full_df$Quantity)
+  sd_quantity <- sd(full_df$Quantity)
+  random_data <- numeric(n)
+  for (i in 1:n) {
+    random_num <- runif(1, min = min_quantity, max = max_quantity)
+    while (random_num > max_quantity | random_num < min_quantity) {
+      random_num <- runif(1, min = min_quantity, max = max_quantity)
+    }
+    random_data[i] <- random_num
+  }
+  return(random_data)
+}
+
+
+random_numbers2 <- generar_random2(full_df, 10614)
+
+
+random_numbers_df2 <- data.frame(Quantity = random_numbers2)
+
+
+colnames(random_numbers_df2) <- c("Future")
+
+
+prediccion3 <- cbind(prediccion3, random_numbers_df2)
+```
+
+```{r}
+parte = sum(language_counts$count)
+language_counts <- language_counts %>%
+  mutate(Porcentaje = (language_counts$count/parte))
+```
+
+```{r}
+View(language_counts)
+```
+
